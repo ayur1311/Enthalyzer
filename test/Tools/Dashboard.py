@@ -1,9 +1,41 @@
-"""
-Live dashboard for the ESP32 Enthalyzer (dehumidification edition).
+"""!
+@file Dashboard.py
+@brief Live dashboard for the ESP32 Enthalyzer
+
+A Python script to log, parse, and visualize the 22-column timestamped 
+raw serial data from the ESP32 Enthalyzer in real-time. 
+
 v6.0 - 22-column output. Gas-side U. 
        Energy panel now compares Q_latent AND Q_water_gain.
        Flow panel shows RAW flow + a 10-sample rolling average.
        CSV logs separate 'date' and 'time' columns.
+
+@author Ayur Jitendra Ghalot
+@contact ayur.ghalot@tu-dresden.de
+@copyright Copyright (c) 2026 Ayur Jitendra Ghalot, TU Dresden, Chair of Bioprocess Engineering.
+
+@license MIT License
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+@date 2026-11-06
+@version 1.0.0
 """
 
 import sys
@@ -23,7 +55,7 @@ from matplotlib.widgets import Button
 # ============================================================
 # CONFIGURATION
 # ============================================================
-PORT               = "COM3"
+PORT               = "COM3" #Select the correct COM port for your ESP32
 BAUD               = 115200
 CONNECT_TIMEOUT_S  = 30
 WINDOW_MIN         = 15
