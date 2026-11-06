@@ -1,13 +1,13 @@
 /******************************************************************************
- * name        = Enthalyzer.ino
- * description = ESP32 firmware for the Enthalyzer. Reads two MAX31865 Pt100
+ * @name        = Enthalyzer.ino
+ * @description = ESP32 firmware for the Enthalyzer. Reads two MAX31865 Pt100
  *               water temperatures, a pulse-type flow sensor and two SHT45
  *               gas sensors, and logs psychrometric and water-side heat-gain
  *               data every 10 s as semicolon-separated text.
- * author      = [Ayur Jitendra Ghalot]
- * contact     = [TU Dresden], [Chair of Bioprocess Engineering]
- * email       = [ayur.ghalot@tu-dresden.de]
- * license     = MIT License
+ * @author      = [Ayur Jitendra Ghalot]
+ * @contact     = [TU Dresden], [Chair of Bioprocess Engineering]
+ * @email       = [ayur.ghalot@tu-dresden.de]
+ * @license     = MIT License
  *
  * Copyright (c) 2026 [Ayur Jitendra Ghalot / TU Dresden]
  *
@@ -29,11 +29,11 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  *
- * date        = [06.11.2026]
- * maintainer  = [Ayur Jitendra Ghalot]
- * imports     = Arduino-ESP32 core, Adafruit MAX31865 library [version],
- *               Sensirion SHT4x I2C library [version]
- * version     = 1.0.0
+ * @date        = [06.11.2026]
+ * @maintainer  = [Ayur Jitendra Ghalot]
+ * @imports     = Arduino-ESP32 core, Adafruit MAX31865 library [1.6.2], Adafruit ADS1X15 library [2.6.2]
+ *               Sensirion SHT4x I2C library [1.1.2]
+ * @version     = 1.0.0
  *****************************************************************************/
 
 #include <Arduino.h>
