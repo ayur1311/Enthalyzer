@@ -1,3 +1,41 @@
+/******************************************************************************
+ * name        = Enthalyzer.ino
+ * description = ESP32 firmware for the Enthalyzer. Reads two MAX31865 Pt100
+ *               water temperatures, a pulse-type flow sensor and two SHT45
+ *               gas sensors, and logs psychrometric and water-side heat-gain
+ *               data every 10 s as semicolon-separated text.
+ * author      = [Ayur Jitendra Ghalot]
+ * contact     = [TU Dresden], [Chair of Bioprocess Engineering]
+ * email       = [ayur.ghalot@tu-dresden.de]
+ * license     = MIT License
+ *
+ * Copyright (c) 2026 [Ayur Jitendra Ghalot / TU Dresden]
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ *
+ * date        = [06.11.2026]
+ * maintainer  = [Ayur Jitendra Ghalot]
+ * imports     = Arduino-ESP32 core, Adafruit MAX31865 library [version],
+ *               Sensirion SHT4x I2C library [version]
+ * version     = 1.0.0
+ *****************************************************************************/
+
 #include <Arduino.h>
 #include <Wire.h>
 #include <SPI.h>
@@ -36,7 +74,7 @@
 const float VVM         = 1.0;    // aeration rate [vessel volumes / minute]
 const float V_LIQUID_L  = 0.05;   // reactor liquid volume [L]  <-- SET THIS EVERY RUN
 
-// >>> FIX 1: Stabilization period — number of initial cycles to discard
+// Stabilization period — number of initial cycles to discard
 // so the SHT45 / PT100 sensors settle before efficiency is computed.
 const uint8_t STABILIZATION_CYCLES = 3;
 uint8_t warmupCounter = 0;   // counts completed measurement cycles at startup
@@ -69,7 +107,7 @@ const float P_ATM      = 101.325;     // Atmospheric pressure [kPa]
 const float COIL_AREA_A   = 0.013289; // Tube external surface area [m²] (6mm OD, 0.705m Long)
 const float COIL_FACTOR_F = 0.95;     // Helical cross-flow correction multiplier
 
-// >>> FIX 2: Valid sensor ranges used to reject bad / disconnected readings.
+// Valid sensor ranges used to reject bad / disconnected readings.
 const float T_MIN_VALID  = -40.0;   // °C
 const float T_MAX_VALID  = 125.0;   // °C
 const float RH_MIN_VALID = 0.0;     // %
@@ -117,7 +155,7 @@ float flowRollingAverage(float newValue) {
   return flowSum / flowCount;
 }
 
-// >>> FIX 2 (helpers): simple range validators for temperature and humidity.
+// Simple range validators for temperature and humidity.
 inline bool isValidTemp(float T)  { return (T >= T_MIN_VALID)  && (T <= T_MAX_VALID)  && !isnan(T); }
 inline bool isValidRH(float RH)   { return (RH >= RH_MIN_VALID) && (RH <= RH_MAX_VALID) && !isnan(RH); }
 
@@ -163,7 +201,13 @@ void setup()
   I2C_1.begin(I2C_1_SDA_PIN, I2C_1_SCL_PIN);
   I2C_2.begin(I2C_2_SDA_PIN, I2C_2_SCL_PIN);
   SPI.begin(SPI_CLK_PIN, SPI_MISO_PIN, SPI_MOSI_PIN, SPI_CS_PIN);
-  Serial.println();
+  Serial.println(); // Blank line for serial monitor separation
+
+  // =========================================================================
+  // SERIAL OUTPUT LOGIC: BOOT & INITIALIZATION
+  // When the ESP32 boots, it attempts to initialize all 5 sensors.
+  // It throws specific error or success messages to the Serial monitor.
+  // =========================================================================
 
   OUTLET_SENSOR.begin(I2C_1, SHT45_I2C_ADDR_44);
   uint32_t serialNumber = 0;
@@ -191,18 +235,20 @@ void setup()
   pinMode(FLOW_SENSOR_PIN, INPUT_PULLUP);
   attachInterrupt(digitalPinToInterrupt(FLOW_SENSOR_PIN), pulseCounter, FALLING);
 
+  // Configuration summary outputs
   Serial.println("successfully initialized flow sensor");
   Serial.println("Flow rolling average window: 10 samples");
   Serial.println("Calibration: 2nd-order, reference = Gas Outlet (SHT45)");
-
   Serial.print("Stabilization period: first ");
   Serial.print(STABILIZATION_CYCLES);
   Serial.println(" measurement cycles will be discarded.");
-
   Serial.print("Process config: VVM = "); Serial.print(VVM, 2);
   Serial.print(" , V_liquid = "); Serial.print(V_LIQUID_L, 2); Serial.println(" L");
 
-  // ── HEADER (22 columns) — Added Q_water_gain [W] at the end ──
+  // =========================================================================
+  // SERIAL OUTPUT LOGIC: CSV HEADER
+  // Throws this 22-column header once at startup so Python/Excel can parse it.
+  // =========================================================================
   Serial.println(
     "Runtime [millis]; H2O_Flowrate_raw [L/min]; H2O_Flowrate [L/min]; H2O_Inlet_Temp [°C]; H2O_Outlet_Temp [°C]; "
     "Inlet_rH [%]; Inlet_Temp [°C]; Inlet_Enthalpy [kJ/kg]; "
@@ -217,6 +263,7 @@ void setup()
 // LOOP
 //
 void loop(){
+  // Only execute and throw output if the Measurement_Interval (10 seconds) has passed
   if (millis() - lastTime >= Measurement_Interval)
   {
     Serial.print(lastTime);
@@ -226,12 +273,15 @@ void loop(){
     pulseCount = 0;
     interrupts();
 
-    // ─── Flow: raw + 10-sample rolling average ───
+    // =========================================================================
+    // SERIAL OUTPUT LOGIC: CONTINUOUS DATA LOGGING (Columns 1-11)
+    // The loop runs every 10s. It ALWAYS calculates and prints the raw data
+    // for columns 1 through 11 (Runtime, Flows, Temps, RHs, Enthalpies).
+    // =========================================================================
     float litersPerMinuteRaw = (pulses / pulsesPerLiter) * (60000.0 / Measurement_Interval);
     float litersPerMinute    = flowRollingAverage(litersPerMinuteRaw);
     float mWater             = litersPerMinute / 60.0; // kg/s (assume 1 kg/L)
 
-    // ─── Water temperatures (2nd-order calibrated) ───
     float tWaterIn  = readInletTemp();
     float tWaterOut = readOutletTemp();
 
@@ -241,7 +291,6 @@ void loop(){
     Serial.print(" ; "); Serial.print(tWaterOut, 3);
     Serial.print(" ; ");
 
-    // ─── Inlet air (SHT45) — linear calibrated ───
     INLET_SENSOR.measureHighPrecision(IN_T, IN_rH);
     IN_T = applyCalib(CAL_GAS_IN, IN_T);
     float hGasIn = calculateEnthalpy(IN_T, IN_rH);
@@ -249,7 +298,6 @@ void loop(){
     Serial.print(IN_T, 3);  Serial.print(" ; ");
     Serial.print(hGasIn, 3);Serial.print(" ; ");
 
-    // ─── Outlet air (SHT45) — REFERENCE ───
     OUTLET_SENSOR.measureHighPrecision(OUT_T, OUT_rH);
     OUT_T = applyCalib(CAL_GAS_OUT, OUT_T);
     float hGasOut = calculateEnthalpy(OUT_T, OUT_rH);
@@ -257,32 +305,44 @@ void loop(){
     Serial.print(OUT_T, 3);  Serial.print(" ; ");
     Serial.print(hGasOut, 3);
 
-    // >>> FIX 1 + FIX 2: validity checks
+    // Check if any sensor is disconnected (NaN) or outputting impossible physics
     bool sensorsValid = isValidTemp(IN_T)  && isValidRH(IN_rH) &&
                         isValidTemp(OUT_T) && isValidRH(OUT_rH) &&
                         isValidTemp(tWaterIn) && isValidTemp(tWaterOut);
 
-    // spacer loops updated from 9 to 10 to match the 22 total columns
+    // =========================================================================
+    // SERIAL OUTPUT LOGIC: BRANCHING PATHS (Columns 12-22)
+    // Depending on the state of the sensors, the code follows one of 3 paths:
+    // =========================================================================
+
+    // --- PATH A: WARMUP PHASE (STABILIZING) ---
+    // Why: Discards the first few cycles to let physical sensors settle.
+    // Throws Output: Replaces column 12 with "STABILIZING" and columns 13-22 with "-"
     if (warmupCounter < STABILIZATION_CYCLES) {
       warmupCounter++;
       Serial.print(" ; STABILIZING");
       for (uint8_t i = 0; i < 10; i++) Serial.print(" ; -");
-      Serial.println();
-      return;
+      Serial.println(); // Completes the line
+      return;           // Skips math and waits for next 10s
     }
 
+    // --- PATH B: INVALID SENSOR DATA ---
+    // Why: Prevents unphysical numbers (e.g. -40C or NaN) from blowing up the math.
+    // Throws Output: Replaces column 12 with "INVALID" and columns 13-22 with "-"
     if (!sensorsValid) {
       Serial.print(" ; INVALID");
       for (uint8_t i = 0; i < 10; i++) Serial.print(" ; -");
-      Serial.println();
-      return;
+      Serial.println(); // Completes the line
+      return;           // Skips math and waits for next 10s
     }
 
-    // ─── Dynamic wall (saturated) state at mean water temp ───
+    // --- PATH C: NORMAL VALID OUTPUT ---
+    // Why: All sensors are warm and reporting valid physical numbers.
+    // Throws Output: Calculates thermodynamic values and prints columns 12 to 22.
+    
+    // Column 12: LMED Driving Force (signed log-mean)
     float tWaterAvg       = (tWaterIn + tWaterOut) / 2.0;
     float hSatWallDynamic = calculateEnthalpy(tWaterAvg, 100.0);
-
-    // ─── LMED Driving Force (signed log-mean) ───
     float deltaH1 = hGasOut - hSatWallDynamic;
     float deltaH2 = hGasIn  - hSatWallDynamic;
     float lmed = 0.0;
@@ -290,9 +350,7 @@ void loop(){
       lmed = (deltaH1 - deltaH2) / log(deltaH1 / deltaH2);
     Serial.print(" ; "); Serial.print(lmed, 3);
 
-    // ═════════════════════════════════════════════════════════
-    //  DEHUMIDIFICATION FRAMEWORK  (Steps 3–7)
-    // ═════════════════════════════════════════════════════════
+    // Columns 13-22: DEHUMIDIFICATION FRAMEWORK MATH
     float wIn   = humidityRatio(IN_T,  IN_rH);
     float wOut  = humidityRatio(OUT_T, OUT_rH);
     float wWall = humidityRatio(tWaterAvg, 100.0);
@@ -316,11 +374,10 @@ void loop(){
     float overallU = 0.0;
     if (fabs(lmed) > 0.001) overallU = Q_total / (COIL_AREA_A * COIL_FACTOR_F * lmed);
 
-    // ─── WATER-SIDE Heat Gain [W] ───
-    // Q = m_dot * Cp * delta_T * 1000 (to convert kW to W)
+    // WATER-SIDE Heat Gain [W]
     float Q_water_gain = mWater * CP_WATER * (tWaterOut - tWaterIn) * 1000.0;
 
-    // ── Stream columns ──
+    // Throw the final math outputs into the serial stream
     Serial.print(" ; "); Serial.print(wIn * 1000.0, 3);
     Serial.print(" ; "); Serial.print(wOut * 1000.0, 3);
     Serial.print(" ; "); Serial.print(dW, 3);
@@ -330,8 +387,8 @@ void loop(){
     Serial.print(" ; "); Serial.print(Q_total, 3);
     Serial.print(" ; "); Serial.print(mCond, 3);
     Serial.print(" ; "); Serial.print(overallU, 3);
-    Serial.print(" ; "); Serial.print(Q_water_gain, 3); // NEW: Output Q_water_gain
+    Serial.print(" ; "); Serial.print(Q_water_gain, 3);
 
-    Serial.println();
+    Serial.println(); // End of Path C: Completes the line and waits 10s
   }
 }
