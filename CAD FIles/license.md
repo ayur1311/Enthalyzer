@@ -3,8 +3,8 @@ MIT License
 Copyright (c) 2026 Ayur Jitendra Ghalot, TU Dresden, Chair of Bioprocess Engineering
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software") — including 
-but not limited to source code, scripts, and 3D-printable model files (.stl, .obj) — 
+of this software and associated documentation files (the "Software") including 
+but not limited to source code, scripts, and 3D-printable model files (.stl, .obj) 
 to deal in the Software without restriction, including without limitation the rights
 to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 copies of the Software, and to permit persons to whom the Software is
